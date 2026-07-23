@@ -3,8 +3,9 @@ package com.nervus.packaging.gradle
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.MapProperty
 import org.gradle.api.provider.Property
+import java.io.Serializable
 
-abstract class NspkgExtension {
+abstract class NspkgExtension : Serializable {
 
     abstract val packageId: Property<String>
     abstract val version: Property<String>
@@ -25,7 +26,7 @@ abstract class NspkgExtension {
     val signing: SigningDsl = SigningDsl()
     val components: ComponentDsl = ComponentDsl()
 
-    class RuntimeDepsExtension {
+    class RuntimeDepsExtension : Serializable {
         var minJavaRelease: Int? = null
     }
 }

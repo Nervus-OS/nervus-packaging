@@ -1,6 +1,8 @@
 package com.nervus.packaging.gradle
 
-class ComponentDsl {
+import java.io.Serializable
+
+class ComponentDsl : Serializable {
 
     private val _components = mutableListOf<ComponentSpec>()
     val components: List<ComponentSpec> get() = _components
@@ -15,7 +17,7 @@ class ComponentDsl {
         _components.add(spec)
     }
 
-    abstract class ComponentSpec(val id: String) {
+    abstract class ComponentSpec(val id: String) : Serializable {
         var entry: String = ""
         var runtime: String = "jvm"
         var nativeLibDir: String? = null

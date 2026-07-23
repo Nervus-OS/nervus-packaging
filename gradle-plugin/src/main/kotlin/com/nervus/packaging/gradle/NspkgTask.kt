@@ -19,14 +19,14 @@ import kotlinx.serialization.json.Json
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.provider.Property
-import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.TaskAction
 import java.nio.file.Path
 
 abstract class NspkgTask : DefaultTask() {
 
-    @get:Input
+    @get:Internal
     abstract val extension: Property<NspkgExtension>
 
     @OutputDirectory

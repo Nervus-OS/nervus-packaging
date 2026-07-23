@@ -1,6 +1,8 @@
 package com.nervus.packaging.gradle
 
-class UsesFeaturesDsl {
+import java.io.Serializable
+
+class UsesFeaturesDsl : Serializable {
 
     private val _features = mutableListOf<UsesFeatureSpec>()
     val features: List<UsesFeatureSpec> get() = _features
@@ -10,7 +12,7 @@ class UsesFeaturesDsl {
         _features.add(spec)
     }
 
-    class UsesFeatureSpec(val id: String) {
+    class UsesFeatureSpec(val id: String) : Serializable {
         var required: Boolean = false
     }
 }

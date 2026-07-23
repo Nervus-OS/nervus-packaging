@@ -1,8 +1,9 @@
 package com.nervus.packaging.gradle
 
 import java.io.File
+import java.io.Serializable
 
-class SigningDsl {
+class SigningDsl : Serializable {
 
     var keyFile: File? = null
 

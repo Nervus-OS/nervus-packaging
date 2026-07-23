@@ -1,6 +1,8 @@
 package com.nervus.packaging.gradle
 
-class ExportDsl {
+import java.io.Serializable
+
+class ExportDsl : Serializable {
 
     private val _exports = mutableListOf<ExportSpec>()
     val exports: List<ExportSpec> get() = _exports
@@ -10,7 +12,7 @@ class ExportDsl {
         _exports.add(spec)
     }
 
-    class ExportSpec(val interfaceName: String) {
+    class ExportSpec(val interfaceName: String) : Serializable {
         var visibility: String = "package"
     }
 }
