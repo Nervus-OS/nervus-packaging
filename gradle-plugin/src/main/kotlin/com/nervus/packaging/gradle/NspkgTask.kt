@@ -23,6 +23,8 @@ import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.TaskAction
 import java.nio.file.Path
+import java.util.jar.JarEntry
+import java.util.jar.JarOutputStream
 
 abstract class NspkgTask : DefaultTask() {
 
@@ -48,7 +50,15 @@ abstract class NspkgTask : DefaultTask() {
         val iconPath = ext.icon.orNull
         val iconFile = iconPath?.let { project.file(it) }
 
-        val fileMap = buildFileMap(ext, jarFiles, nativeFiles, resourceFiles, iconFile, iconPath)
+        for (spec in ext.components.components) {
+            if (spec.runtime.lowercase() == "jvm" && spec.mainClass == null) {
+                throw GradleException("Component '${spec.id}' with runtime 'jvm' must specify mainClass")
+            }
+        }
+
+        val thinJarDir = project.buildDir.resolve("tmp/thin-jars").also { it.mkdirs() }
+
+        val fileMap = buildFileMap(ext, jarFiles, nativeFiles, resourceFiles, iconFile, iconPath, thinJarDir)
 
         val manifest = buildManifestModel(ext, fileMap)
 
@@ -84,6 +94,7 @@ abstract class NspkgTask : DefaultTask() {
         fileMap: Map<String, Path>,
     ): ManifestModel {
         val components = ext.components.components.map { spec ->
+            val isJvmWithMainClass = spec.runtime.lowercase() == "jvm" && spec.mainClass != null
             Component(
                 id = spec.id,
                 type = when (spec) {
@@ -96,7 +107,7 @@ abstract class NspkgTask : DefaultTask() {
                     "jvm" -> RuntimeType.jvm
                     else -> throw GradleException("Unknown runtime '${spec.runtime}' for component '${spec.id}'")
                 },
-                entry = spec.entry,
+                entry = if (isJvmWithMainClass) "lib/${spec.id}.jar" else spec.entry,
                 nativeLibDir = spec.nativeLibDir,
                 launchMode = when (spec.launchMode) {
                     "always-on" -> LaunchMode.always_on
@@ -159,11 +170,23 @@ abstract class NspkgTask : DefaultTask() {
         resourceFiles: Set<java.io.File>,
         iconFile: java.io.File?,
         iconPath: String?,
+        thinJarDir: java.io.File,
     ): Map<String, Path> {
         val map = mutableMapOf<String, Path>()
 
         for (jar in jarFiles) {
             map["lib/${jar.name}"] = jar.toPath()
+        }
+
+        val mainJarName = jarFiles.firstOrNull()?.name
+        if (mainJarName != null) {
+            for (spec in ext.components.components) {
+                if (spec.runtime.lowercase() == "jvm" && spec.mainClass != null) {
+                    val thinJarFile = thinJarDir.resolve("${spec.id}.jar")
+                    generateThinJar(thinJarFile, spec.mainClass!!, mainJarName)
+                    map["lib/${spec.id}.jar"] = thinJarFile.toPath()
+                }
+            }
         }
 
         for ((abi, file) in nativeFiles) {
@@ -197,5 +220,20 @@ abstract class NspkgTask : DefaultTask() {
             }
         }
         return result
+    }
+
+    private fun generateThinJar(outputFile: java.io.File, mainClass: String, classPath: String) {
+        JarOutputStream(outputFile.outputStream().buffered()).use { jos ->
+            jos.putNextEntry(JarEntry("META-INF/MANIFEST.MF"))
+            jos.write(
+                """
+Manifest-Version: 1.0
+Main-Class: $mainClass
+Class-Path: $classPath
+
+""".trimStart().toByteArray(Charsets.UTF_8)
+            )
+            jos.closeEntry()
+        }
     }
 }

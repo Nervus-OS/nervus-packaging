@@ -21,6 +21,7 @@ class ComponentDsl : Serializable {
         var entry: String = ""
         var runtime: String = "jvm"
         var nativeLibDir: String? = null
+        var mainClass: String? = null
         var launchMode: String = "on-demand"
         var criticality: String? = null
         var disableable: Boolean? = null
