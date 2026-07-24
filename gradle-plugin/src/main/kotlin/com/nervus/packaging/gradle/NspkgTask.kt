@@ -45,6 +45,9 @@ abstract class NspkgTask : DefaultTask() {
         val ext = extension.get()
 
         val jarFiles = project.files(project.tasks.named("jar")).files
+        // Collect runtime dependency jars (for JVM components)
+        val runtimeDeps: Set<java.io.File> = project.configurations.findByName("runtimeClasspath")
+            ?.files?.filter { it.name.endsWith(".jar") && it.isFile }?.toSet() ?: emptySet()
         val nativeFiles = collectNativeLibs(ext)
         val resourceFiles = project.files("src/main/resources").asFileTree.files
         val iconPath = ext.icon.orNull
@@ -58,7 +61,7 @@ abstract class NspkgTask : DefaultTask() {
 
         val thinJarDir = project.buildDir.resolve("tmp/thin-jars").also { it.mkdirs() }
 
-        val fileMap = buildFileMap(ext, jarFiles, nativeFiles, resourceFiles, iconFile, iconPath, thinJarDir)
+        val fileMap = buildFileMap(ext, jarFiles, runtimeDeps, nativeFiles, resourceFiles, iconFile, iconPath, thinJarDir)
 
         val manifest = buildManifestModel(ext, fileMap)
 
@@ -166,6 +169,7 @@ abstract class NspkgTask : DefaultTask() {
     private fun buildFileMap(
         ext: NspkgExtension,
         jarFiles: Set<java.io.File>,
+        runtimeDeps: Set<java.io.File>,
         nativeFiles: Map<String, java.io.File>,
         resourceFiles: Set<java.io.File>,
         iconFile: java.io.File?,
@@ -174,18 +178,30 @@ abstract class NspkgTask : DefaultTask() {
     ): Map<String, Path> {
         val map = mutableMapOf<String, Path>()
 
+        // All jar names in lib/ (used to build thin jar Class-Path)
+        val libJarNames = mutableListOf<String>()
+
         for (jar in jarFiles) {
             map["lib/${jar.name}"] = jar.toPath()
+            libJarNames.add(jar.name)
         }
 
-        val mainJarName = jarFiles.firstOrNull()?.name
-        if (mainJarName != null) {
-            for (spec in ext.components.components) {
-                if (spec.runtime.lowercase() == "jvm" && spec.mainClass != null) {
-                    val thinJarFile = thinJarDir.resolve("${spec.id}.jar")
-                    generateThinJar(thinJarFile, spec.mainClass!!, mainJarName)
-                    map["lib/${spec.id}.jar"] = thinJarFile.toPath()
-                }
+        // Bundle runtime dependency jars
+        val projectJarNames = jarFiles.map { it.name }.toSet()
+        for (dep in runtimeDeps) {
+            val name = dep.name
+            if (name !in projectJarNames && !map.containsKey("lib/$name")) {
+                map["lib/$name"] = dep.toPath()
+                libJarNames.add(name)
+            }
+        }
+
+        // Build thin jars with Class-Path covering all lib jars
+        for (spec in ext.components.components) {
+            if (spec.runtime.lowercase() == "jvm" && spec.mainClass != null) {
+                val thinJarFile = thinJarDir.resolve("${spec.id}.jar")
+                generateThinJar(thinJarFile, spec.mainClass!!, libJarNames.joinToString(" "))
+                map["lib/${spec.id}.jar"] = thinJarFile.toPath()
             }
         }
 
@@ -225,13 +241,28 @@ abstract class NspkgTask : DefaultTask() {
     private fun generateThinJar(outputFile: java.io.File, mainClass: String, classPath: String) {
         JarOutputStream(outputFile.outputStream().buffered()).use { jos ->
             jos.putNextEntry(JarEntry("META-INF/MANIFEST.MF"))
+            val lineLimit = 72
+            val header = "Class-Path: "
+            val sb = StringBuilder(header)
+            var lineLen = header.length
+            for (jar in classPath.split(" ")) {
+                if (lineLen + jar.length + 1 > lineLimit && lineLen > header.length) {
+                    sb.append("\n ")
+                    lineLen = 1
+                }
+                if (lineLen > 1 || header.length > 0) {
+                    sb.append(" ")
+                    lineLen += 1
+                }
+                sb.append(jar)
+                lineLen += jar.length
+            }
+            sb.append("\n")
             jos.write(
                 """
 Manifest-Version: 1.0
 Main-Class: $mainClass
-Class-Path: $classPath
-
-""".trimStart().toByteArray(Charsets.UTF_8)
+$sb""".trimStart().toByteArray(Charsets.UTF_8)
             )
             jos.closeEntry()
         }
